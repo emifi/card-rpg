@@ -11,7 +11,7 @@ use crate::game_manager::TextureManager;
 
 pub const CAM_W: u32 = 1280;
 pub const CAM_H: u32 = 720;
-pub const TILE_SIZE: u32 = 10;
+pub const TILE_SIZE: u32 = 40;
 
 // Fills the given WindowCanvas wincan with the given Color fill_color
 pub fn fill_screen(wincan: &mut WindowCanvas, fill_color: Color) -> Result<(), String> {
@@ -54,6 +54,21 @@ pub fn draw_sprite(wincan: &mut WindowCanvas, sprite_texture: &'_ Texture, (x_po
 
     // draw the sprite at the given position
     wincan.copy(&sprite_texture, None, Rect::new(x_pos, y_pos, sprite_info.width, sprite_info.height))?;
+
+    Ok(())
+}
+
+// Draws sprite at the given location
+// Uses the dimensions of the texture itself, doesn't do any resizing
+//first bool false left, true right
+//second bool false upright, true downward
+pub fn draw_sprite_mirror(wincan: &mut WindowCanvas, sprite_texture: &'_ Texture, (x_pos, y_pos): (i32, i32),horiz: bool, vert: bool) -> Result<(), String> {
+
+    // queries the texture to get the sprite width and the sprite height
+    let sprite_info = sprite_texture.query();
+
+    // draw the sprite at the given position
+    wincan.copy_ex(&sprite_texture, None, Rect::new(x_pos, y_pos, sprite_info.width, sprite_info.height), 0.0, None, horiz, vert)?;
 
     Ok(())
 }
