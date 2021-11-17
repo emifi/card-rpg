@@ -15,7 +15,6 @@ use crate::scenes::online::Online;
 use crate::scenes::overworld::Overworld;
 use crate::scenes::menu::Menu; // <-- implement with scene change
 use crate::scenes::credits::Credits;
-use crate::cards::battle_system;
 
 use crate::events::event_subsystem::{EventSystem, GameEvent};
 
@@ -55,6 +54,10 @@ impl<'a> GameManager<'a> {
 		for event in game_events {
 			match event {
 				Some(GameEvent::WindowClose) => self.game_state = GameState::Quit,
+				Some(GameEvent::SetBattlerNPCDeck(deck_id)) => { 
+				    //println!("sending the SetBattlerNPCDeck event to battle, deck_id was {}", deck_id as u32);
+				    self.battle.handle_input(GameEvent::SetBattlerNPCDeck(deck_id)); // only scene that should care about the battler deck id is battle.rs
+				},
 				Some(GameEvent::SceneChange(scene_id)) => self.curr_scene = scene_id,
 				Some(e) => self.handle_input(e),
 				None => {},
