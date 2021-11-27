@@ -7,6 +7,8 @@ use std::time::Instant;
 use sdl2::pixels::Color;
 use sdl2::render::{Texture, WindowCanvas};
 use sdl2::keyboard::Keycode;
+use sdl2::mixer::Music;
+use sdl2::mixer::{InitFlag, AUDIO_S16LSB, DEFAULT_CHANNELS};
 
 use crate::scenes::Scene;
 use crate::scenes::GameEvent;
@@ -47,6 +49,7 @@ pub struct Battle<'a> {
 	tmp_enemy_played_card: usize,
 
 	dummy_drawn_card: DrawnCard,
+	dummy_drawn_card_enemy: DrawnCard,
 	frames_elapsed: u32,
 
 
@@ -65,6 +68,11 @@ pub struct Battle<'a> {
 	playCard: Rc<Texture<'a>>,
 	retCard: Rc<Texture<'a>>,
 	backDrop: Rc<Texture<'a>>,
+
+	//AUDIO
+	music: Music<'a>,
+	is_paused: bool,
+	is_stopped: bool,
 }
 
 impl<'a> Battle<'a> {
@@ -87,6 +95,7 @@ impl<'a> Battle<'a> {
 		let accepting_input = true;
 		let tmp_enemy_played_card = 100;
 		let dummy_drawn_card = DrawnCard::new(0.0, 800.0).unwrap();
+		let dummy_drawn_card_enemy = DrawnCard::new(0.0, 800.0).unwrap();
 		let dummy = Rc::new(RefCell::new(Battler::new(("").to_string(),0,0,0,0)));  //REQUIRED TO AVOID USE
 																		//of Option<T>. DO NOT REMOVE
 		let battler_map = crate::cards::battle_system::populate_battler_map();
@@ -131,6 +140,24 @@ impl<'a> Battle<'a> {
 		let retCard = texture_manager.borrow_mut().load("assets/return.png")?;
 		let backDrop = texture_manager.borrow_mut().load("assets/backdrop.png")?;
 
+		/*let frequency = 44100;
+    	let format = AUDIO_S16LSB;
+    	let channels = DEFAULT_CHANNELS;
+    	let chunk_size = 1024;
+    	sdl2::mixer::open_audio(frequency, format, channels, chunk_size)?;
+    	let _mixer_context = sdl2::mixer::init(InitFlag::OGG)?;*/
+
+		let frequency = 44100;
+    	let format = AUDIO_S16LSB;
+    	let channels = DEFAULT_CHANNELS;
+    	let chunk_size = 1024;
+    	sdl2::mixer::open_audio(frequency, format, channels, chunk_size)?;
+    	let _mixer_context = sdl2::mixer::init(InitFlag::OGG)?;
+
+		let music = Music::from_file("assets/music/BATTLE.ogg")?;
+		let is_paused = false;
+		let is_stopped = true;
+
 		Ok(Battle {
 			wincan,
 			event_system,
@@ -145,6 +172,7 @@ impl<'a> Battle<'a> {
 			discard,
 			tmp_enemy_played_card,
 			dummy_drawn_card,
+			dummy_drawn_card_enemy,
 			frames_elapsed: 0,
 			e_pip_unfilled,
 			e_pip_filled,
@@ -168,6 +196,9 @@ impl<'a> Battle<'a> {
 			playCard,
 			retCard,
 			backDrop,
+			music,
+			is_paused,
+			is_stopped,
 		})
 	}
 
@@ -180,6 +211,14 @@ impl<'a> Battle<'a> {
 	// Because the program is single threaded, we can't use extra loops to wait on conditions
 	//      Instead, we should use the main game loop and check specific conditions at specific times. I've broken a turn/round into phases to do this
 	pub fn step(&'_ mut self) -> Result<(), String> {
+		if(self.is_stopped){
+			self.is_stopped = false;
+			self.music.play(-1);
+		}
+		if(self.is_paused){
+			self.is_paused = false;
+			sdl2::mixer::Music::resume();
+		}
 
         //let mut battle_stat = self.battle_handler.borrow_mut();
 
@@ -322,9 +361,11 @@ impl<'a> Battle<'a> {
 	            if self.turn == TurnPhase::TurnP2 && self.enemy_delay_inst.elapsed().as_secs() >= 1 {
 
 	                // Enemy AI should be called from here
+	                println!("about to construct the game tree for the turn");
 					let mut gametree = GameTree::new(self.battle_handler.borrow().clone());
 					gametree.populate(3);
 					gametree.print();
+					println!("finished making the game tree");
 					let card_rslt = self.battle_handler.borrow_mut().get_p2().borrow().select_hand(0);
 					//let card_cost = card_rslt.unwrap().get_cost();
 					if !card_rslt.is_none(){
@@ -340,12 +381,12 @@ impl<'a> Battle<'a> {
 
 							//println!("Trying to play card with ID {}\n{}", card_ID, curr_card.to_string());
 
-							// if the player has enough energy to cover the cost of playing the card:
-							crate::cards::battle_system::play_card(Rc::clone(&self.battle_handler), curr_card);
 							// add card to discard pile after playing
 							self.tmp_enemy_played_card = card_ID as usize;
 							self.battle_handler.borrow_mut().get_p2().borrow_mut().hand_discard_card(0);
 							self.battle_handler.borrow_mut().get_p2().borrow_mut().adjust_curr_energy(-(curr_card_cost as i32));
+							// if the player has enough energy to cover the cost of playing the card:
+							crate::cards::battle_system::play_card(Rc::clone(&self.battle_handler), curr_card);
 
 						}
 						// otherwise, don't
@@ -358,9 +399,9 @@ impl<'a> Battle<'a> {
 						//println!("{}", self.battle_handler.borrow_mut().get_p2().borrow_mut().to_string());
 					}
 
-                    // delay the turn phase by 1 second
+                    // delay the turn phase by 1 second NEED THIS FOR CARD DRAW ANIM
                     println!("waiting another second...");
-	                //self.enemy_delay_inst = Instant::now();
+	                self.enemy_delay_inst = Instant::now();
 
 	                // eventually, when the enemy learns how to play multiple cards per turn, this will have to wait until all cards are played
 	                self.turn = TurnPhase::PostTurnP2;
@@ -449,6 +490,8 @@ impl<'a> Battle<'a> {
 	        if self.enemy_delay_inst.elapsed().as_secs() >= 5 {
 	            println!("Moving away from the battle scene");
                 self.turn = TurnPhase::NotInitialized;
+				self.is_stopped = true;
+				sdl2::mixer::Music::halt();
                 self.event_system.borrow().change_scene(1).unwrap();
                 return Ok(());
 	        }
@@ -803,10 +846,10 @@ impl Scene for Battle<'_> {
                 //println!("  Trying to draw!");
 
                 // if the dummy card isn't in the
-                if self.dummy_drawn_card.x_pos != target_pos {
+                if self.dummy_drawn_card_enemy.x_pos != target_pos {
 
                     // increment the position over time
-                    self.dummy_drawn_card.x_pos = lerp(self.dummy_drawn_card.x_pos, target_pos, self.frames_elapsed as f32 / 50.0);
+                    self.dummy_drawn_card_enemy.x_pos = lerp(self.dummy_drawn_card_enemy.x_pos, target_pos, self.frames_elapsed as f32 / 50.0);
                     // increase the frames elapsed in the animation
                     self.frames_elapsed = self.frames_elapsed + 1;
 
@@ -816,16 +859,16 @@ impl Scene for Battle<'_> {
 
                     // although if you copy this line and the one from the P1 function, it does show the card the enemy is drawing, might be a neat card effect
                     //let top_card = player2.get_deck_card().unwrap();
-                    crate::video::gfx::draw_sprite_to_dims(&mut wincan, &self.deck, (100,148), ((self.dummy_drawn_card.x_pos) as i32, 20))?;
+                    crate::video::gfx::draw_sprite_to_dims(&mut wincan, &self.deck, (100,148), ((self.dummy_drawn_card_enemy.x_pos) as i32, 20))?;
 
                     // check if card has reached the destination
-                    if self.dummy_drawn_card.x_pos == target_pos {
+                    if self.dummy_drawn_card_enemy.x_pos == target_pos {
 
                         // actually draw the card
                         player2.draw_card(false);
 
                         self.frames_elapsed = 0;
-                        self.dummy_drawn_card.x_pos = 1140.0;
+                        self.dummy_drawn_card_enemy.x_pos = 40.0;
 
                     }
                 }
