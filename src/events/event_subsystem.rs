@@ -3,6 +3,7 @@ use sdl2::{Sdl, EventPump, EventSubsystem};
 use sdl2::keyboard::Keycode;
 use sdl2::event::Event as SDL_Event;
 
+use crate::cards::battle_enums::*;
 use crate::scenes::online::TurnData;
 
 pub struct EventSystem {
@@ -31,15 +32,24 @@ impl EventSystem {
 				    match custom_event_code {
 				        200 => { game_events.push(Some(GameEvent::SceneChange(data1 as u32))); },
 				        201 => { game_events.push(Some(GameEvent::SetBattlerNPCDeck(data1 as u32))); },
-				        202 => { game_events.push(Some(GameEvent::OnlineTurn(data1 as *mut _ as *mut TurnData))); },
-				        _ => {},
-				    }
+				        202 => { game_events.push(Some(GameEvent::OnlineTurn((data1 as u32 >> 16) as u16, data1 as u16))); },
+						    203 => { let stat = if(data1 as u32==1){
+								  TurnPhase::NotInitOnlineP1
+							  }else{
+								  TurnPhase::NotInitOnlineP2
+							  };
+								  game_events.push(Some(GameEvent::SetClientTurn(stat)));
+
+						    },
+						    204 => { game_events.push(Some(GameEvent::OnlinePlay(data1 as u32)));},
+				          _ => {},
+				        }
 				},
 				//SDL_Event::User{code: scene_change_event_id, data1: scene_id, ..} => game_events.push(Some(GameEvent::SceneChange(scene_id as u32))),
 				_ => game_events.push(None),
 			}
 		}
-		
+
 		return game_events;
 	}
 
@@ -75,21 +85,26 @@ impl EventSystem {
 	}
 
 	pub fn receive_online(&self, mut turn_data: TurnData) -> Result<(), String> {
+
+		let data = (turn_data.turn_id as u32) << 16 + turn_data.card_ids;
+
 		let event = sdl2::event::Event::User {
 			timestamp: 0,
 			window_id: 0,
 			type_: self.online_turn_event_id,
 			code: 202,
-			data1: &mut turn_data as *mut _ as *mut c_void,
+			data1: data as *mut c_void,
 			data2: 0x5678 as *mut c_void,
 		};
+
+		println!("Turn Data before: {:?}", turn_data);
 
 		self.event_subsystem.push_event(event)?;
 		Ok(())
 	}
-	
+
 	pub fn set_battler_npc_deck(&self, deck_id: u32) -> Result<(), String> {
-	
+
 	    let setBattlerNpcDeckEvent = sdl2::event::Event::User {
 	        timestamp: 0,
 	        window_id: 0,
@@ -98,7 +113,7 @@ impl EventSystem {
 	        data1: deck_id as *mut c_void,
 	        data2: 0x5678 as *mut c_void, // could use this field to set the player's deck as well? To do both at once.
 	    };
-	    
+
 	    //println!("pushed the set_battler_npc_deck event to the event pump. \n{:#?}", setBattlerNpcDeckEvent);
 	    //match self.event_subsystem.push_event(setBattlerNpcDeckEvent) {
 	        //Ok(T) => println!("     the return value of the event subsystem was ()"),
@@ -106,7 +121,7 @@ impl EventSystem {
 	    //}
 	    self.event_subsystem.push_event(setBattlerNpcDeckEvent)?;
 	    Ok(())
-	
+
 	}
 }
 
@@ -117,7 +132,9 @@ pub enum GameEvent {
 	SetBattlerNPCDeck(u32),
 	MouseClick(i32, i32),
 	MouseHover(i32, i32),
-	OnlineTurn(*mut TurnData),
+	OnlineTurn(u16, u16),
+	OnlinePlay(u32),
+	SetClientTurn(TurnPhase),
 	KeyPress(Keycode),
 	KeyRelease(Keycode),
 }
