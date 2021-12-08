@@ -557,70 +557,75 @@ impl<'a> Battle<'a> {
                 // self.enemy_delay_inst is updated in the PreTurnP2 phase. After 1 second, the code below runs
 	            if self.turn == TurnPhase::TurnP2 && !self.is_online && self.enemy_delay_inst.elapsed().as_secs() >= 1 {
 	                // Enemy AI should be called from here
-	                println!("about to construct the game tree for the turn");
+					let mut THINKING_FLAG = true;
+					while THINKING_FLAG {
+						println!("about to construct the game tree for the turn");
 			    
-			    	//if a generated gametree has ties for its highest utility state, look less rounds into the future
-			    	//avoids janky behavior where ai gives up and kills itself in end game
-					let mut gametree = GameTree::new(self.battle_handler.borrow().clone());
-					gametree.populate(3);
-					gametree.calculate_utilities();
-					gametree.minimax();
-					gametree.print();
-
-					if (gametree.has_ties()) {
-						println!("\ngametree 3 has ties, trying again...\n");
-						gametree = GameTree::new(self.battle_handler.borrow().clone());
-						gametree.populate(2);
+						//if a generated gametree has ties for its highest utility state, look less rounds into the future
+						//avoids janky behavior where ai gives up and kills itself in end game
+						let mut gametree = GameTree::new(self.battle_handler.borrow().clone());
+						gametree.populate(3);
 						gametree.calculate_utilities();
 						gametree.minimax();
 						gametree.print();
 
 						if (gametree.has_ties()) {
-							println!("\ngametree 2 has ties, trying again...\n");
+							println!("\ngametree 3 has ties, trying again...\n");
 							gametree = GameTree::new(self.battle_handler.borrow().clone());
-							gametree.populate(1);
+							gametree.populate(2);
 							gametree.calculate_utilities();
 							gametree.minimax();
 							gametree.print();
 
 							if (gametree.has_ties()) {
-								println!("gametree 1 has ties, wtf!!");
+								println!("\ngametree 2 has ties, trying again...\n");
+								gametree = GameTree::new(self.battle_handler.borrow().clone());
+								gametree.populate(1);
+								gametree.calculate_utilities();
+								gametree.minimax();
+								gametree.print();
+
+								if (gametree.has_ties()) {
+									println!("gametree 1 has ties, wtf!!");
+								}
 							}
 						}
-					}
-					
-					println!("finished making the game tree");
-					let card_rslt = gametree.minimax(); //let card_rslt = self.battle_handler.borrow_mut().get_p2().borrow().select_hand(0);
-					println!("finished minimax");
-					if card_rslt.is_some(){
-						let card_ID = card_rslt.unwrap();//self.battle_handler.borrow_mut().get_p1().borrow().select_hand(i).unwrap();
-						let curr_card = self.battle_handler.borrow_mut().get_card(card_ID);
-						print!("{}\n",curr_card.to_string());
-						let curr_card_cost = curr_card.get_cost() as i32;
-						println!("card cost is {}", curr_card_cost);
-						let curr_energy = self.battle_handler.borrow_mut().get_p2().borrow().get_curr_energy();
-						println!("current energy is {}", curr_energy);
-						// only play if player has enough energy
-						if curr_energy >= curr_card_cost{
+						
+						println!("finished making the game tree");
+						let card_rslt = gametree.minimax(); //let card_rslt = self.battle_handler.borrow_mut().get_p2().borrow().select_hand(0);
+						println!("finished minimax");
+						if card_rslt.is_some(){
+							let card_ID = card_rslt.unwrap();//self.battle_handler.borrow_mut().get_p1().borrow().select_hand(i).unwrap();
+							let curr_card = self.battle_handler.borrow_mut().get_card(card_ID);
+							print!("{}\n",curr_card.to_string());
+							let curr_card_cost = curr_card.get_cost() as i32;
+							println!("card cost is {}", curr_card_cost);
+							let curr_energy = self.battle_handler.borrow_mut().get_p2().borrow().get_curr_energy();
+							println!("current energy is {}", curr_energy);
+							// only play if player has enough energy
+							if curr_energy >= curr_card_cost{
 
-							//println!("Trying to play card with ID {}\n{}", card_ID, curr_card.to_string());
+								//println!("Trying to play card with ID {}\n{}", card_ID, curr_card.to_string());
 
-							// add card to discard pile after playing
-							self.tmp_enemy_played_card = card_ID as usize;
-							self.battle_handler.borrow_mut().get_p2().borrow_mut().hand_find_and_discard_card(card_ID);
-							self.battle_handler.borrow_mut().get_p2().borrow_mut().adjust_curr_energy(-(curr_card_cost as i32));
-							// if the player has enough energy to cover the cost of playing the card:
-							crate::cards::battle_system::play_card(Rc::clone(&self.battle_handler), curr_card);
+								// add card to discard pile after playing
+								self.tmp_enemy_played_card = card_ID as usize;
+								self.battle_handler.borrow_mut().get_p2().borrow_mut().hand_find_and_discard_card(card_ID);
+								self.battle_handler.borrow_mut().get_p2().borrow_mut().adjust_curr_energy(-(curr_card_cost as i32));
+								// if the player has enough energy to cover the cost of playing the card:
+								crate::cards::battle_system::play_card(Rc::clone(&self.battle_handler), curr_card);
 
+							}
+							// otherwise, don't
+							else {
+								println!("Not enough energy!");
+							}
+
+
+							//println!("{}", self.battle_handler.borrow_mut().get_p1().borrow_mut().to_string());
+							//println!("{}", self.battle_handler.borrow_mut().get_p2().borrow_mut().to_string());
+						} else {
+							THINKING_FLAG = false;
 						}
-						// otherwise, don't
-						else {
-							println!("Not enough energy!");
-						}
-
-
-						//println!("{}", self.battle_handler.borrow_mut().get_p1().borrow_mut().to_string());
-						//println!("{}", self.battle_handler.borrow_mut().get_p2().borrow_mut().to_string());
 					}
 
 
@@ -1396,7 +1401,7 @@ impl Scene for Battle<'_> {
 		// --------------
 
 		// draw ai's hand
-		let debug_flag = false;
+		let mut debug_flag = false;
 		if debug_flag == true //debug for ai testing
 		{
 			for i in 0..p2_hand_size {
